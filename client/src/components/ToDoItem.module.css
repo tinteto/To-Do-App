@@ -1,0 +1,29 @@
+button {
+  background-color: rgb(171, 163, 163);
+  color: white;
+  border: none;
+  border-radius: 5px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+button:hover {
+  background-color: rgb(136, 43, 173);
+}
+
+.textToDo {
+  font-weight: bold;
+}
+
+.textCompleted {
+  text-decoration: line-through;
+  font-style: italic;
+}
+
+.toDo {
+  color: orange;
+}
+
+.isCompleted {
+  color: rgb(8, 164, 8);
+}
