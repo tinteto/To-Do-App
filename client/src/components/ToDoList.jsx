@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import ToDoItem from "./ToDoItem";
 import styles from './TodoList.module.css';
 
-const url = 'http://localhost:3030/jsonstore/todos';
+const url = 'http://localhost:3030/data/ideas';
 
 export default function ToDoList() {
   const [tasks, setTasks] = useState([]);
@@ -11,11 +11,8 @@ export default function ToDoList() {
 useEffect(() => {
 fetch(url)
 .then(response => response.json())
-.then(data => {
-  const result = Object.values(data);
-  console.log(result);
-  
-  setTasks(result);
+.then(data => {  
+  setTasks(data);
 })
   }, []);
 

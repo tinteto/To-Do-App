@@ -93,10 +93,10 @@
             // NOTE: the OPTIONS method results in undefined result and also it never processes plugins - keep this in mind
             if (method == 'OPTIONS') {
                 Object.assign(headers, {
-                    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+                    'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
                     'Access-Control-Allow-Credentials': false,
                     'Access-Control-Max-Age': '86400',
-                    'Access-Control-Allow-Headers': 'X-Requested-With, X-HTTP-Method-Override, Content-Type, Accept, X-Authorization'
+                    'Access-Control-Allow-Headers': 'X-Requested-With, X-HTTP-Method-Override, Content-Type, Accept, X-Authorization, X-Admin'
                 });
             } else {
                 try {
@@ -146,10 +146,13 @@
                     result = await service(context, { method, tokens, query, body });
                 }
 
-                // NOTE: currently there is no scenario where result is undefined - it will either be data, or an error object;
-                // this may change with further extension of the services, so this check should stay in place
+                // NOTE: logout does not return a result
+                // in this case the content type header should be omitted, to allow checks on the client
                 if (result !== undefined) {
                     result = JSON.stringify(result);
+                } else {
+                    status = 204;
+                    delete headers['Content-Type'];
                 }
             }
         };
@@ -173,8 +176,15 @@
             .split('&')
             .filter(s => s != '')
             .map(x => x.split('='))
-            .reduce((p, [k, v]) => Object.assign(p, { [k]: decodeURIComponent(v) }), {});
-        const body = await parseBody(req);
+            .reduce((p, [k, v]) => Object.assign(p, { [k]: decodeURIComponent(v.replace(/\+/g, " ")) }), {});
+
+        let body;
+        // If req stream has ended body has been parsed
+        if (req.readableEnded) {
+            body = req.body;
+        } else {
+            body = await parseBody(req);
+        }
 
         return {
             serviceName,
@@ -212,7 +222,7 @@
          * @param {{method: string, tokens: string[], query: *, body: *}} request Request parameters
          */
         async parseRequest(context, request) {
-            for (let {method, name, handler} of this._actions) {
+            for (let { method, name, handler } of this._actions) {
                 if (method === request.method && matchAndAssignParams(context, request.tokens[0], name)) {
                     return await handler(context, request.tokens.slice(1), request.query, request.body);
                 }
@@ -226,7 +236,7 @@
          * @param {(context, tokens: string[], query: *, body: *)} handler Request handler
          */
         registerAction(method, name, handler) {
-            this._actions.push({method, name, handler});
+            this._actions.push({ method, name, handler });
         }
 
         /**
@@ -254,6 +264,15 @@
          */
         put(name, handler) {
             this.registerAction('PUT', name, handler);
+        }
+
+        /**
+         * Register PATCH action
+         * @param {string} name Action name. Can be a glob pattern.
+         * @param {(context, tokens: string[], query: *, body: *)} handler Request handler
+         */
+        patch(name, handler) {
+            this.registerAction('PATCH', name, handler);
         }
 
         /**
@@ -296,7 +315,7 @@
     const uuid$1 = util.uuid;
 
 
-    const data = fs__default['default'].readdirSync('./data').reduce((p, c) => {
+    const data = fs__default['default'].existsSync('./data') ? fs__default['default'].readdirSync('./data').reduce((p, c) => {
         const content = JSON.parse(fs__default['default'].readFileSync('./data/' + c));
         const collection = c.slice(0, -5);
         p[collection] = {};
@@ -304,7 +323,7 @@
             p[collection][endpoint] = content[endpoint];
         }
         return p;
-    }, {});
+    }, {}) : {};
 
     const actions = {
         get: (context, tokens, query, body) => {
@@ -335,6 +354,21 @@
             return responseData[newId];
         },
         put: (context, tokens, query, body) => {
+            tokens = [context.params.collection, ...tokens];
+            console.log('Request body:\n', body);
+
+            let responseData = data;
+            for (let token of tokens.slice(0, -1)) {
+                if (responseData !== undefined) {
+                    responseData = responseData[token];
+                }
+            }
+            if (responseData !== undefined && responseData[tokens.slice(-1)] !== undefined) {
+                responseData[tokens.slice(-1)] = body;
+            }
+            return responseData[tokens.slice(-1)];
+        },
+        patch: (context, tokens, query, body) => {
             tokens = [context.params.collection, ...tokens];
             console.log('Request body:\n', body);
 
@@ -373,6 +407,7 @@
     dataService.get(':collection', actions.get);
     dataService.post(':collection', actions.post);
     dataService.put(':collection', actions.put);
+    dataService.patch(':collection', actions.patch);
     dataService.delete(':collection', actions.delete);
 
 
@@ -382,12 +417,27 @@
      * This service requires storage and auth plugins
      */
 
+    const { AuthorizationError: AuthorizationError$1 } = errors;
+
+
+
     const userService = new Service_1();
 
+    userService.get('me', getSelf);
     userService.post('register', onRegister);
     userService.post('login', onLogin);
     userService.get('logout', onLogout);
-    // TODO: get user details
+
+
+    function getSelf(context, tokens, query, body) {
+        if (context.user) {
+            const result = Object.assign({}, context.user);
+            delete result.hashedPassword;
+            return result;
+        } else {
+            throw new AuthorizationError$1();
+        }
+    }
 
     function onRegister(context, tokens, query, body) {
         return context.auth.register(body);
@@ -403,18 +453,17 @@
 
     var users = userService.parseRequest;
 
-    /*
-     * This service requires storage and auth plugins
-     */
-
-    const { NotFoundError: NotFoundError$1, RequestError: RequestError$1, CredentialError: CredentialError$1, AuthorizationError: AuthorizationError$1 } = errors;
+    const { NotFoundError: NotFoundError$1, RequestError: RequestError$1 } = errors;
 
 
-    const dataService$1 = new Service_1();
-    dataService$1.get(':collection', get);
-    dataService$1.post(':collection', post);
-    dataService$1.put(':collection', put);
-    dataService$1.delete(':collection', del);
+    var crud = {
+        get,
+        post,
+        put,
+        patch,
+        delete: del
+    };
+
 
     function validateRequest(context, tokens, query) {
         /*
@@ -487,21 +536,6 @@
                 return context.storage.get();
             }
 
-            if (query.distinct) {
-                const props = query.distinct.split(',').filter(p => p != '');
-                responseData = Object.values(responseData.reduce((distinct, c) => {
-                    const key = props.map(p => c[p]).join('::');
-                    if (distinct.hasOwnProperty(key) == false) {
-                        distinct[key] = c;
-                    }
-                    return distinct;
-                }, {}));
-            }
-
-            if (query.count) {
-                return responseData.length;
-            }
-
             if (query.sortBy) {
                 const props = query.sortBy
                     .split(',')
@@ -509,7 +543,7 @@
                     .map(p => p.split(' ').filter(p => p != ''))
                     .map(([p, desc]) => ({ prop: p, desc: desc ? true : false }));
 
-                // Sorting priority is from first ot last, therefore we sort from last to first
+                // Sorting priority is from first to last, therefore we sort from last to first
                 for (let i = props.length - 1; i >= 0; i--) {
                     let { prop, desc } = props[i];
                     responseData.sort(({ [prop]: propA }, { [prop]: propB }) => {
@@ -528,6 +562,21 @@
             const pageSize = Number(query.pageSize) || 10;
             if (query.pageSize) {
                 responseData = responseData.slice(0, pageSize);
+            }
+    		
+    		if (query.distinct) {
+                const props = query.distinct.split(',').filter(p => p != '');
+                responseData = Object.values(responseData.reduce((distinct, c) => {
+                    const key = props.map(p => c[p]).join('::');
+                    if (distinct.hasOwnProperty(key) == false) {
+                        distinct[key] = c;
+                    }
+                    return distinct;
+                }, {}));
+            }
+
+            if (query.count) {
+                return responseData.length;
             }
 
             if (query.select) {
@@ -569,6 +618,8 @@
             }
         }
 
+        context.canAccess(responseData);
+
         return responseData;
     }
 
@@ -579,14 +630,10 @@
         if (tokens.length > 0) {
             throw new RequestError$1('Use PUT to update records');
         }
+        context.canAccess(undefined, body);
 
+        body._ownerId = context.user._id;
         let responseData;
-
-        if (context.user) {
-            body._ownerId = context.user._id;
-        } else {
-            throw new AuthorizationError$1();
-        }
 
         try {
             responseData = context.storage.add(context.params.collection, body);
@@ -606,11 +653,6 @@
         }
 
         let responseData;
-
-        if (!context.user) {
-            throw new AuthorizationError$1();
-        }
-
         let existing;
 
         try {
@@ -619,12 +661,38 @@
             throw new NotFoundError$1();
         }
 
-        if (context.user._id !== existing._ownerId) {
-            throw new CredentialError$1();
-        }
+        context.canAccess(existing, body);
 
         try {
             responseData = context.storage.set(context.params.collection, tokens[0], body);
+        } catch (err) {
+            throw new RequestError$1();
+        }
+
+        return responseData;
+    }
+
+    function patch(context, tokens, query, body) {
+        console.log('Request body:\n', body);
+
+        validateRequest(context, tokens);
+        if (tokens.length != 1) {
+            throw new RequestError$1('Missing entry ID');
+        }
+
+        let responseData;
+        let existing;
+
+        try {
+            existing = context.storage.get(context.params.collection, tokens[0]);
+        } catch (err) {
+            throw new NotFoundError$1();
+        }
+
+        context.canAccess(existing, body);
+
+        try {
+            responseData = context.storage.merge(context.params.collection, tokens[0], body);
         } catch (err) {
             throw new RequestError$1();
         }
@@ -639,11 +707,6 @@
         }
 
         let responseData;
-
-        if (!context.user) {
-            throw new AuthorizationError$1();
-        }
-
         let existing;
 
         try {
@@ -652,9 +715,7 @@
             throw new NotFoundError$1();
         }
 
-        if (context.user._id !== existing._ownerId) {
-            throw new CredentialError$1();
-        }
+        context.canAccess(existing);
 
         try {
             responseData = context.storage.delete(context.params.collection, tokens[0]);
@@ -665,6 +726,16 @@
         return responseData;
     }
 
+    /*
+     * This service requires storage and auth plugins
+     */
+
+    const dataService$1 = new Service_1();
+    dataService$1.get(':collection', crud.get);
+    dataService$1.post(':collection', crud.post);
+    dataService$1.put(':collection', crud.put);
+    dataService$1.patch(':collection', crud.patch);
+    dataService$1.delete(':collection', crud.delete);
 
     var data$1 = dataService$1.parseRequest;
 
@@ -685,7 +756,7 @@
         };
     };
 
-    var require$$0 = "<!DOCTYPE html>\r\n<html lang=\"en\">\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta http-equiv=\"X-UA-Compatible\" content=\"IE=edge\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <title>SUPS Admin Panel</title>\r\n    <style>\r\n        * {\r\n            padding: 0;\r\n            margin: 0;\r\n        }\r\n\r\n        body {\r\n            padding: 32px;\r\n            font-size: 16px;\r\n        }\r\n\r\n        .layout::after {\r\n            content: '';\r\n            clear: both;\r\n            display: table;\r\n        }\r\n\r\n        .col {\r\n            display: block;\r\n            float: left;\r\n        }\r\n\r\n        p {\r\n            padding: 8px 16px;\r\n        }\r\n\r\n        table {\r\n            border-collapse: collapse;\r\n        }\r\n\r\n        caption {\r\n            font-size: 120%;\r\n            text-align: left;\r\n            padding: 4px 8px;\r\n            font-weight: bold;\r\n            background-color: #ddd;\r\n        }\r\n\r\n        table, tr, th, td {\r\n            border: 1px solid #ddd;\r\n        }\r\n\r\n        th, td {\r\n            padding: 4px 8px;\r\n        }\r\n\r\n        ul {\r\n            list-style: none;\r\n        }\r\n\r\n        .collection-list a {\r\n            display: block;\r\n            width: 120px;\r\n            padding: 4px 8px;\r\n            text-decoration: none;\r\n            color: black;\r\n            background-color: #ccc;\r\n        }\r\n        .collection-list a:hover {\r\n            background-color: #ddd;\r\n        }\r\n        .collection-list a:visited {\r\n            color: black;\r\n        }\r\n    </style>\r\n    <script type=\"module\">\nimport { html, render } from 'https://unpkg.com/lit-html?module';\nimport { until } from 'https://unpkg.com/lit-html/directives/until?module';\n\nconst api = {\r\n    async get(url) {\r\n        return json(url);\r\n    },\r\n    async post(url, body) {\r\n        return json(url, {\r\n            method: 'POST',\r\n            headers: { 'Content-Type': 'application/json' },\r\n            body: JSON.stringify(body)\r\n        });\r\n    }\r\n};\r\n\r\nasync function json(url, options) {\r\n    return await (await fetch('/' + url, options)).json();\r\n}\r\n\r\nasync function getCollections() {\r\n    return api.get('data');\r\n}\r\n\r\nasync function getRecords(collection) {\r\n    return api.get('data/' + collection);\r\n}\r\n\r\nasync function getThrottling() {\r\n    return api.get('util/throttle');\r\n}\r\n\r\nasync function setThrottling(throttle) {\r\n    return api.post('util', { throttle });\r\n}\n\nasync function collectionList(onSelect) {\r\n    const collections = await getCollections();\r\n\r\n    return html`\r\n    <ul class=\"collection-list\">\r\n        ${collections.map(collectionLi)}\r\n    </ul>`;\r\n\r\n    function collectionLi(name) {\r\n        return html`<li><a href=\"javascript:void(0)\" @click=${(ev) => onSelect(ev, name)}>${name}</a></li>`;\r\n    }\r\n}\n\nasync function recordTable(collectionName) {\r\n    const records = await getRecords(collectionName);\r\n    const layout = getLayout(records);\r\n\r\n    return html`\r\n    <table>\r\n        <caption>${collectionName}</caption>\r\n        <thead>\r\n            <tr>${layout.map(f => html`<th>${f}</th>`)}</tr>\r\n        </thead>\r\n        <tbody>\r\n            ${records.map(r => recordRow(r, layout))}\r\n        </tbody>\r\n    </table>`;\r\n}\r\n\r\nfunction getLayout(records) {\r\n    const result = new Set(['_id']);\r\n    records.forEach(r => Object.keys(r).forEach(k => result.add(k)));\r\n\r\n    return [...result.keys()];\r\n}\r\n\r\nfunction recordRow(record, layout) {\r\n    return html`\r\n    <tr>\r\n        ${layout.map(f => html`<td>${JSON.stringify(record[f]) || html`<span>(missing)</span>`}</td>`)}\r\n    </tr>`;\r\n}\n\nasync function throttlePanel(display) {\r\n    const active = await getThrottling();\r\n\r\n    return html`\r\n    <p>\r\n        Request throttling: </span>${active}</span>\r\n        <button @click=${(ev) => set(ev, true)}>Enable</button>\r\n        <button @click=${(ev) => set(ev, false)}>Disable</button>\r\n    </p>`;\r\n\r\n    async function set(ev, state) {\r\n        ev.target.disabled = true;\r\n        await setThrottling(state);\r\n        display();\r\n    }\r\n}\n\n//import page from '//unpkg.com/page/page.mjs';\r\n\r\n\r\nfunction start() {\r\n    const main = document.querySelector('main');\r\n    editor(main);\r\n}\r\n\r\nasync function editor(main) {\r\n    let list = html`<div class=\"col\">Loading&hellip;</div>`;\r\n    let viewer = html`<div class=\"col\">\r\n    <p>Select collection to view records</p>\r\n</div>`;\r\n    display();\r\n\r\n    list = html`<div class=\"col\">${await collectionList(onSelect)}</div>`;\r\n    display();\r\n\r\n    async function display() {\r\n        render(html`\r\n        <section class=\"layout\">\r\n            ${until(throttlePanel(display), html`<p>Loading</p>`)}\r\n        </section>\r\n        <section class=\"layout\">\r\n            ${list}\r\n            ${viewer}\r\n        </section>`, main);\r\n    }\r\n\r\n    async function onSelect(ev, name) {\r\n        ev.preventDefault();\r\n        viewer = html`<div class=\"col\">${await recordTable(name)}</div>`;\r\n        display();\r\n    }\r\n}\r\n\r\nstart();\n\n</script>\r\n</head>\r\n<body>\r\n    <main>\r\n        Loading&hellip;\r\n    </main>\r\n</body>\r\n</html>";
+    var require$$0 = "<!DOCTYPE html>\r\n<html lang=\"en\">\r\n<head>\r\n    <meta charset=\"UTF-8\">\r\n    <meta http-equiv=\"X-UA-Compatible\" content=\"IE=edge\">\r\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\r\n    <title>SUPS Admin Panel</title>\r\n    <style>\r\n        * {\r\n            padding: 0;\r\n            margin: 0;\r\n        }\r\n\r\n        body {\r\n            padding: 32px;\r\n            font-size: 16px;\r\n        }\r\n\r\n        .layout::after {\r\n            content: '';\r\n            clear: both;\r\n            display: table;\r\n        }\r\n\r\n        .col {\r\n            display: block;\r\n            float: left;\r\n        }\r\n\r\n        p {\r\n            padding: 8px 16px;\r\n        }\r\n\r\n        table {\r\n            border-collapse: collapse;\r\n        }\r\n\r\n        caption {\r\n            font-size: 120%;\r\n            text-align: left;\r\n            padding: 4px 8px;\r\n            font-weight: bold;\r\n            background-color: #ddd;\r\n        }\r\n\r\n        table, tr, th, td {\r\n            border: 1px solid #ddd;\r\n        }\r\n\r\n        th, td {\r\n            padding: 4px 8px;\r\n        }\r\n\r\n        ul {\r\n            list-style: none;\r\n        }\r\n\r\n        .collection-list a {\r\n            display: block;\r\n            width: 120px;\r\n            padding: 4px 8px;\r\n            text-decoration: none;\r\n            color: black;\r\n            background-color: #ccc;\r\n        }\r\n        .collection-list a:hover {\r\n            background-color: #ddd;\r\n        }\r\n        .collection-list a:visited {\r\n            color: black;\r\n        }\r\n    </style>\r\n    <script type=\"module\">\nimport { html, render } from 'https://unpkg.com/lit-html@1.3.0?module';\nimport { until } from 'https://unpkg.com/lit-html@1.3.0/directives/until?module';\n\nconst api = {\r\n    async get(url) {\r\n        return json(url);\r\n    },\r\n    async post(url, body) {\r\n        return json(url, {\r\n            method: 'POST',\r\n            headers: { 'Content-Type': 'application/json' },\r\n            body: JSON.stringify(body)\r\n        });\r\n    }\r\n};\r\n\r\nasync function json(url, options) {\r\n    return await (await fetch('/' + url, options)).json();\r\n}\r\n\r\nasync function getCollections() {\r\n    return api.get('data');\r\n}\r\n\r\nasync function getRecords(collection) {\r\n    return api.get('data/' + collection);\r\n}\r\n\r\nasync function getThrottling() {\r\n    return api.get('util/throttle');\r\n}\r\n\r\nasync function setThrottling(throttle) {\r\n    return api.post('util', { throttle });\r\n}\n\nasync function collectionList(onSelect) {\r\n    const collections = await getCollections();\r\n\r\n    return html`\r\n    <ul class=\"collection-list\">\r\n        ${collections.map(collectionLi)}\r\n    </ul>`;\r\n\r\n    function collectionLi(name) {\r\n        return html`<li><a href=\"javascript:void(0)\" @click=${(ev) => onSelect(ev, name)}>${name}</a></li>`;\r\n    }\r\n}\n\nasync function recordTable(collectionName) {\r\n    const records = await getRecords(collectionName);\r\n    const layout = getLayout(records);\r\n\r\n    return html`\r\n    <table>\r\n        <caption>${collectionName}</caption>\r\n        <thead>\r\n            <tr>${layout.map(f => html`<th>${f}</th>`)}</tr>\r\n        </thead>\r\n        <tbody>\r\n            ${records.map(r => recordRow(r, layout))}\r\n        </tbody>\r\n    </table>`;\r\n}\r\n\r\nfunction getLayout(records) {\r\n    const result = new Set(['_id']);\r\n    records.forEach(r => Object.keys(r).forEach(k => result.add(k)));\r\n\r\n    return [...result.keys()];\r\n}\r\n\r\nfunction recordRow(record, layout) {\r\n    return html`\r\n    <tr>\r\n        ${layout.map(f => html`<td>${JSON.stringify(record[f]) || html`<span>(missing)</span>`}</td>`)}\r\n    </tr>`;\r\n}\n\nasync function throttlePanel(display) {\r\n    const active = await getThrottling();\r\n\r\n    return html`\r\n    <p>\r\n        Request throttling: </span>${active}</span>\r\n        <button @click=${(ev) => set(ev, true)}>Enable</button>\r\n        <button @click=${(ev) => set(ev, false)}>Disable</button>\r\n    </p>`;\r\n\r\n    async function set(ev, state) {\r\n        ev.target.disabled = true;\r\n        await setThrottling(state);\r\n        display();\r\n    }\r\n}\n\n//import page from '//unpkg.com/page/page.mjs';\r\n\r\n\r\nfunction start() {\r\n    const main = document.querySelector('main');\r\n    editor(main);\r\n}\r\n\r\nasync function editor(main) {\r\n    let list = html`<div class=\"col\">Loading&hellip;</div>`;\r\n    let viewer = html`<div class=\"col\">\r\n    <p>Select collection to view records</p>\r\n</div>`;\r\n    display();\r\n\r\n    list = html`<div class=\"col\">${await collectionList(onSelect)}</div>`;\r\n    display();\r\n\r\n    async function display() {\r\n        render(html`\r\n        <section class=\"layout\">\r\n            ${until(throttlePanel(display), html`<p>Loading</p>`)}\r\n        </section>\r\n        <section class=\"layout\">\r\n            ${list}\r\n            ${viewer}\r\n        </section>`, main);\r\n    }\r\n\r\n    async function onSelect(ev, name) {\r\n        ev.preventDefault();\r\n        viewer = html`<div class=\"col\">${await recordTable(name)}</div>`;\r\n        display();\r\n    }\r\n}\r\n\r\nstart();\n\n</script>\r\n</head>\r\n<body>\r\n    <main>\r\n        Loading&hellip;\r\n    </main>\r\n</body>\r\n</html>";
 
     const mode = process.argv[2] == '-dev' ? 'dev' : 'prod';
 
@@ -838,13 +909,36 @@
         }
 
         /**
-         * Update entry by ID
+         * Replace entry by ID
+         * @param {string} collection Name of collection to access. Throws error if not found.
+         * @param {number|string} id ID of entry to update. Throws error if not found.
+         * @param {Object} data Value to store. Record will be replaced!
+         * @return {Object} Updated entry.
+         */
+        function set(collection, id, data) {
+            if (!collections.has(collection)) {
+                throw new ReferenceError('Collection does not exist: ' + collection);
+            }
+            const targetCollection = collections.get(collection);
+            if (!targetCollection.has(id)) {
+                throw new ReferenceError('Entry does not exist: ' + id);
+            }
+
+            const existing = targetCollection.get(id);
+            const record = assignSystemProps(deepCopy(data), existing);
+            record._updatedOn = Date.now();
+            targetCollection.set(id, record);
+            return Object.assign(deepCopy(record), { _id: id });
+        }
+
+        /**
+         * Modify entry by ID
          * @param {string} collection Name of collection to access. Throws error if not found.
          * @param {number|string} id ID of entry to update. Throws error if not found.
          * @param {Object} data Value to store. Shallow merge will be performed!
          * @return {Object} Updated entry.
          */
-        function set(collection, id, data) {
+         function merge(collection, id, data) {
             if (!collections.has(collection)) {
                 throw new ReferenceError('Collection does not exist: ' + collection);
             }
@@ -918,7 +1012,27 @@
             return result;
         }
 
-        return { get, add, set, delete: del, query };
+        return { get, add, set, merge, delete: del, query };
+    }
+
+
+    function assignSystemProps(target, entry, ...rest) {
+        const whitelist = [
+            '_id',
+            '_createdOn',
+            '_updatedOn',
+            '_ownerId'
+        ];
+        for (let prop of whitelist) {
+            if (entry.hasOwnProperty(prop)) {
+                target[prop] = deepCopy(entry[prop]);
+            }
+        }
+        if (rest.length > 0) {
+            Object.assign(target, ...rest);
+        }
+
+        return target;
     }
 
 
@@ -953,7 +1067,7 @@
 
     var storage = initPlugin;
 
-    const { ConflictError: ConflictError$1, CredentialError: CredentialError$2, RequestError: RequestError$2 } = errors;
+    const { ConflictError: ConflictError$1, CredentialError: CredentialError$1, RequestError: RequestError$2 } = errors;
 
     function initPlugin$1(settings) {
         const identity = settings.identity;
@@ -979,7 +1093,7 @@
                 if (user !== undefined) {
                     context.user = user;
                 } else {
-                    throw new CredentialError$2('Invalid access token');
+                    throw new CredentialError$1('Invalid access token');
                 }
             }
 
@@ -992,10 +1106,10 @@
                 } else if (context.protectedStorage.query('users', { [identity]: body[identity] }).length !== 0) {
                     throw new ConflictError$1(`A user with the same ${identity} already exists`);
                 } else {
-                    const newUser = {
+                    const newUser = Object.assign({}, body, {
                         [identity]: body[identity],
                         hashedPassword: hash(body.password)
-                    };
+                    });
                     const result = context.protectedStorage.add('users', newUser);
                     delete result.hashedPassword;
 
@@ -1018,10 +1132,10 @@
 
                         return result;
                     } else {
-                        throw new CredentialError$2('Email or password don\'t match');
+                        throw new CredentialError$1('Login or password don\'t match');
                     }
                 } else {
-                    throw new CredentialError$2('Email or password don\'t match');
+                    throw new CredentialError$1('Login or password don\'t match');
                 }
             }
 
@@ -1032,7 +1146,7 @@
                         context.protectedStorage.delete('sessions', session._id);
                     }
                 } else {
-                    throw new CredentialError$2('User session does not exist');
+                    throw new CredentialError$1('User session does not exist');
                 }
             }
 
@@ -1076,19 +1190,155 @@
 
     var util$2 = initPlugin$2;
 
+    /*
+     * This plugin requires auth and storage plugins
+     */
+
+    const { RequestError: RequestError$3, ConflictError: ConflictError$2, CredentialError: CredentialError$2, AuthorizationError: AuthorizationError$2 } = errors;
+
+    function initPlugin$3(settings) {
+        const actions = {
+            'GET': '.read',
+            'POST': '.create',
+            'PUT': '.update',
+            'PATCH': '.update',
+            'DELETE': '.delete'
+        };
+        const rules = Object.assign({
+            '*': {
+                '.create': ['User'],
+                '.update': ['Owner'],
+                '.delete': ['Owner']
+            }
+        }, settings.rules);
+
+        return function decorateContext(context, request) {
+            // special rules (evaluated at run-time)
+            const get = (collectionName, id) => {
+                return context.storage.get(collectionName, id);
+            };
+            const isOwner = (user, object) => {
+                return user._id == object._ownerId;
+            };
+            context.rules = {
+                get,
+                isOwner
+            };
+            const isAdmin = request.headers.hasOwnProperty('x-admin');
+
+            context.canAccess = canAccess;
+
+            function canAccess(data, newData) {
+                const user = context.user;
+                const action = actions[request.method];
+                let { rule, propRules } = getRule(action, context.params.collection, data);
+
+                if (Array.isArray(rule)) {
+                    rule = checkRoles(rule, data);
+                } else if (typeof rule == 'string') {
+                    rule = !!(eval(rule));
+                }
+                if (!rule && !isAdmin) {
+                    throw new CredentialError$2();
+                }
+                propRules.map(r => applyPropRule(action, r, user, data, newData));
+            }
+
+            function applyPropRule(action, [prop, rule], user, data, newData) {
+                // NOTE: user needs to be in scope for eval to work on certain rules
+                if (typeof rule == 'string') {
+                    rule = !!eval(rule);
+                }
+
+                if (rule == false) {
+                    if (action == '.create' || action == '.update') {
+                        delete newData[prop];
+                    } else if (action == '.read') {
+                        delete data[prop];
+                    }
+                }
+            }
+
+            function checkRoles(roles, data, newData) {
+                if (roles.includes('Guest')) {
+                    return true;
+                } else if (!context.user && !isAdmin) {
+                    throw new AuthorizationError$2();
+                } else if (roles.includes('User')) {
+                    return true;
+                } else if (context.user && roles.includes('Owner')) {
+                    return context.user._id == data._ownerId;
+                } else {
+                    return false;
+                }
+            }
+        };
+
+
+
+        function getRule(action, collection, data = {}) {
+            let currentRule = ruleOrDefault(true, rules['*'][action]);
+            let propRules = [];
+
+            // Top-level rules for the collection
+            const collectionRules = rules[collection];
+            if (collectionRules !== undefined) {
+                // Top-level rule for the specific action for the collection
+                currentRule = ruleOrDefault(currentRule, collectionRules[action]);
+
+                // Prop rules
+                const allPropRules = collectionRules['*'];
+                if (allPropRules !== undefined) {
+                    propRules = ruleOrDefault(propRules, getPropRule(allPropRules, action));
+                }
+
+                // Rules by record id 
+                const recordRules = collectionRules[data._id];
+                if (recordRules !== undefined) {
+                    currentRule = ruleOrDefault(currentRule, recordRules[action]);
+                    propRules = ruleOrDefault(propRules, getPropRule(recordRules, action));
+                }
+            }
+
+            return {
+                rule: currentRule,
+                propRules
+            };
+        }
+
+        function ruleOrDefault(current, rule) {
+            return (rule === undefined || rule.length === 0) ? current : rule;
+        }
+
+        function getPropRule(record, action) {
+            const props = Object
+                .entries(record)
+                .filter(([k]) => k[0] != '.')
+                .filter(([k, v]) => v.hasOwnProperty(action))
+                .map(([k, v]) => [k, v[action]]);
+
+            return props;
+        }
+    }
+
+    var rules = initPlugin$3;
+
     var identity = "email";
     var protectedData = {
     	users: {
     		"35c62d76-8152-4626-8712-eeb96381bea8": {
     			email: "peter@abv.bg",
+    			username: "Peter",
     			hashedPassword: "83313014ed3e2391aa1332615d2f053cf5c1bfe05ca1cbcb5582443822df6eb1"
     		},
     		"847ec027-f659-4086-8032-5173e2f9c93a": {
     			email: "george@abv.bg",
+    			username: "George",
     			hashedPassword: "83313014ed3e2391aa1332615d2f053cf5c1bfe05ca1cbcb5582443822df6eb1"
     		},
     		"60f0cf0b-34b0-4abd-9769-8c42f830dffc": {
     			email: "admin@abv.bg",
+    			username: "Admin",
     			hashedPassword: "fac7060c3e17e6f151f247eacb2cd5ae80b8c36aedb8764e18a41bbdc16aa302"
     		}
     	},
@@ -1236,57 +1486,351 @@
     	},
     	furniture: {
     	},
+    	orders: {
+    	},
     	movies: {
-    		"1240549d-f0e0-497e-ab99-eb8f703713d7": {
-    			_ownerId: "847ec027-f659-4086-8032-5173e2f9c93a",
-    			title: "Black Widow",
-    			description: "Natasha Romanoff aka Black Widow confronts the darker parts of her ledger when a dangerous conspiracy with ties to her past arises. Comes on the screens 2020.",
-    			img: "https://miro.medium.com/max/735/1*akkAa2CcbKqHsvqVusF3-w.jpeg",
-    			_createdOn: 1614935055353,
-    			_id: "1240549d-f0e0-497e-ab99-eb8f703713d7"
-    		},
-    		"143e5265-333e-4150-80e4-16b61de31aa0": {
-    			_ownerId: "847ec027-f659-4086-8032-5173e2f9c93a",
-    			title: "Wonder Woman 1984",
-    			description: "Diana must contend with a work colleague and businessman, whose desire for extreme wealth sends the world down a path of destruction, after an ancient artifact that grants wishes goes missing.",
-    			img: "https://pbs.twimg.com/media/ETINgKwWAAAyA4r.jpg",
-    			_createdOn: 1614935181470,
-    			_id: "143e5265-333e-4150-80e4-16b61de31aa0"
-    		},
-    		"a9bae6d8-793e-46c4-a9db-deb9e3484909": {
-    			_ownerId: "35c62d76-8152-4626-8712-eeb96381bea8",
-    			title: "Top Gun 2",
-    			description: "After more than thirty years of service as one of the Navy's top aviators, Pete Mitchell is where he belongs, pushing the envelope as a courageous test pilot and dodging the advancement in rank that would ground him.",
-    			img: "https://i.pinimg.com/originals/f2/a4/58/f2a458048757bc6914d559c9e4dc962a.jpg",
-    			_createdOn: 1614935268135,
-    			_id: "a9bae6d8-793e-46c4-a9db-deb9e3484909"
-    		}
+            "358270c0-de60-40c1-8f49-7cae143acf62": {
+                title: "The Lion King",
+                releaseDate: "1994",
+                creators: "Irene Mecchi, Jonathan Roberts, Linda Woolverton",
+                stars: " Matthew Broderick, Jeremy Irons, James Earl Jones",
+                img: "\\images\\The_Lion_King_poster.jpg",
+                description: "Lion prince Simba and his father are targeted by his bitter uncle, who wants to ascend the throne himself.",
+                _id: "358270c0-de60-40c1-8f49-7cae143acf62",
+                _createdOn: 1743396009549,
+                _ownerId: "f079549b-d998-4c4f-9778-70c5ca2516b2",
+                _updatedOn: 1743396021670
+            },
+            "9676d5ba-5a27-4006-a873-29d7c7d3aacc": {
+                _ownerId: "f079549b-d998-4c4f-9778-70c5ca2516b2",
+                title: "The Little Mermaid",
+                releaseDate: "1989",
+                creators: "Ron Clements, John Musker",
+                stars: "Jodi Benson, Samuel E. Wright",
+                img: "\\images\\The_Little_Mermaid_(Official_1989_Film_Poster).png",
+                description: "A mermaid princess makes a Faustian bargain in an attempt to become human and win a prince's love.",
+                _createdOn: 1743396199978,
+                _id: "9676d5ba-5a27-4006-a873-29d7c7d3aacc"
+            },
+            "314bd417-6449-4713-8aa9-8f6807d97c60": {
+                _ownerId: "12286a29-f286-4827-9607-ee809644f15a",
+                title: "Beauty and the Beast",
+                releaseDate: "1991",
+                creators: "Linda Woolverton, Brenda Chapman, Chris Sanders",
+                stars: "Paige O'Hara, Robby Benson, Jesse Corti",
+                img: "\\images\\Beauty_and_the_Beast_(1991_film)_poster.jpg",
+                description: "A prince cursed to spend his days as a hideous monster sets out to regain his humanity by earning a young woman's love.",
+                _createdOn: 1743396648875,
+                _id: "314bd417-6449-4713-8aa9-8f6807d97c60"
+            },
+           "398531ff-8294-406f-8496-395117003403": {
+                _ownerId: "12286a29-f286-4827-9607-ee809644f15a",
+                title: "Finding Nemo",
+                releaseDate: "2003",
+                creators: "Andrew Stanton, Bob Peterson, David Reynolds",
+                stars: " Albert Brooks, Ellen DeGeneres, Alexander Gould",
+                img: "\\images\\Finding_Nemo.jpg",
+                description: "After his son is captured in the Great Barrier Reef and taken to Sydney, a timid clownfish sets out on a journey to bring him home.",
+                _createdOn: 1743396764345,
+                _id: "398531ff-8294-406f-8496-395117003403"
+            },
+           "6759285c-0a47-41fe-8aea-10c953537526": {
+                _ownerId: "12286a29-f286-4827-9607-ee809644f15a",
+                title: "Frozen",
+                releaseDate: "2013",
+                creators: "Jennifer Lee, Hans Christian Andersen, Chris Buck",
+                stars: "Kristen Bell, Idina Menzel, Jonathan Groff",
+                img: "\\images\\Frozen_(2013_film)_poster.jpg",
+                description: "Fearless optimist Anna teams up with rugged mountain man Kristoff and his loyal reindeer Sven in an epic journey to find Anna's sister Elsa, whose icy powers have trapped the kingdom of Arendelle in eternal winter.",
+                _createdOn: 1743396939677,
+                _id: "6759285c-0a47-41fe-8aea-10c953537526"
+            },
+           "6a5cfdf9-7177-4946-afb0-c9216fac1072": {
+               _ownerId: "12286a29-f286-4827-9607-ee809644f15a",
+                title: "Tangled",
+                releaseDate: "2010",
+                creators: "Dan Fogelman, Jacob Grimm, Wilhelm Grimm",
+                stars: "Mandy Moore, Zachary Levy, Donna Murphy",
+                img: "\\images\\Tangled_poster.jpg",
+                description: "The magically long-haired Rapunzel has spent her entire life in a tower, but now that a runaway thief has stumbled upon her, she is about to discover the world for the first time, and who she really is.",
+                _createdOn: 1743397035154,
+                _id: "6a5cfdf9-7177-4946-afb0-c9216fac1072",
+            },
+            "4f29cd51-190b-4352-b541-f5d48154c973": {
+                _ownerId: "24957e98-af87-4122-b389-9aafda2ef6bd",
+                title: "Toy Story",
+                releaseDate: "1995",
+                creators: "John Lasseter, Pete Docter, Andrew Stanton",
+                stars: "Tom Hanks, Tim Allen, Don Rickles",
+                img: "\\images\\Toy_Story.jpg",
+                description: "A cowboy doll is profoundly threatened and jealous when a new spaceman action figure supplants him as top toy in a boy's bedroom.",
+                _createdOn: 1743423272729,
+                _id: "4f29cd51-190b-4352-b541-f5d48154c973"
+            },
+            "02124884-6585-4d4a-9804-e3fe697f93ac": {
+                _ownerId: "24957e98-af87-4122-b389-9aafda2ef6bd",
+                title: "Coco",
+                releaseDate: "2017",
+                creators: "Lee Unkrich, Jason Katz, Matthew Aldrich",
+                stars: "Anthony Gonzalez, Gael García Bernal, Benjamin Bratt",
+                img: "\\images\\Coco_(2017_film)_poster.jpg",
+                description: "Aspiring musician Miguel, confronted with his family's ancestral ban on music, enters the Land of the Dead to find his great-great-grandfather, a legendary singer.",
+                _createdOn: 1743425766907,
+                _id: "02124884-6585-4d4a-9804-e3fe697f93ac"
+            },
+            "218ed82b-218c-4ac5-ae60-c5f7fabd2f86": {
+                _ownerId: "24957e98-af87-4122-b389-9aafda2ef6bd",
+                title: "Encanto",
+                releaseDate: "2021",
+                creators: "Jared Bush, Byron Howard, Charise Castro Smith",
+                stars: "Stephanie Beatriz, María Cecilia Botero, John Leguizamo",
+                img: "\\images\\Encanto_poster.jpg",
+                description: "An extraordinary family, the Madrigals, live hidden in the mountains of Colombia, in a magical house called an Encanto. The magic of the Encanto has blessed every child in the family with a unique gift - every child except one, Mirabel.",
+                _createdOn: 1743425952253,
+                _id: "218ed82b-218c-4ac5-ae60-c5f7fabd2f86"
+            },
+            "c179e3ef-be16-4723-9ea3-71929b2d7619": {
+                _ownerId: "60f0cf0b-34b0-4abd-9769-8c42f830dffc",
+                title: "Kung Fu Panda",
+                releaseDate: "2008",
+                creators: "Jonathan Aibel, Glenn Berger, Ethan Reiff",
+                stars: "Jack Black, Ian McShane, Angelina Jolie",
+                img: "\\images\\Kungfupanda.jpg",
+                description: "To everyone's surprise, including his own, Po, an overweight, clumsy panda, is chosen as protector of the Valley of Peace. His suitability will soon be tested as the valley's arch-enemy is on his way.",
+                _createdOn: 1743428574450,
+                _id: "c179e3ef-be16-4723-9ea3-71929b2d7619"
+            },
+            "8b831f10-c1bd-4922-be37-d3336c33b6a7": {
+                _ownerId: "60f0cf0b-34b0-4abd-9769-8c42f830dffc",
+                title: "How to Train Your Dragon",
+                releaseDate: "2010",
+                creators: "William Davies, Dean DeBlois, Chris Sanders",
+                stars: "Jay Baruchel, Gerard Butler, Craig Ferguson",
+                img: "\\images\\How_to_Train_Your_Dragon_Poster.jpg",
+                description: "A hapless young Viking who aspires to hunt dragons becomes the unlikely friend of a young dragon himself, and learns there may be more to the creatures than he assumed.",
+                _createdOn: 1743602628246,
+                _id: "8b831f10-c1bd-4922-be37-d3336c33b6a7"
+            },
+            "64d4017d-e61b-4a4c-852f-7adb748e39c6": {
+                _ownerId: "60f0cf0b-34b0-4abd-9769-8c42f830dffc",
+                title: "Up",
+                releaseDate: "2009",
+                creators: "Pete Docter, Bob Peterson",
+                stars: "Edward Asner, Jordan Nagai, John Ratzenberger",
+                img: "\\images\\Up_(2009_film).jpg",
+                description: "78-year-old Carl Fredricksen travels to South America in his house equipped with balloons, inadvertently taking a young stowaway.",
+                _createdOn: 1743602786605,
+                _id: "64d4017d-e61b-4a4c-852f-7adb748e39c6"
+            },
+            "6d118e6b-0c84-46dc-a0ce-2a2509b10219": {
+                _ownerId: "60f0cf0b-34b0-4abd-9769-8c42f830dffc",
+                title: "Finding Dory",
+                releaseDate: "2016",
+                creators: " Andrew Stanton, Victoria Strouse",
+                stars: "Ellen DeGeneres, Albert Brooks, Ed O'Neill",
+                img: "\\images\\Finding_Dory.jpg",
+                description: "Friendly but forgetful blue tang Dory begins a search for her long-lost parents and everyone learns a few things about the real meaning of family along the way.",
+                _createdOn: 1743602920279,
+                _id: "6d118e6b-0c84-46dc-a0ce-2a2509b10219"
+            },
+            "038aa356-5efe-491a-840e-0180d98476bc": {
+                _ownerId: "60f0cf0b-34b0-4abd-9769-8c42f830dffc",
+                title: "The Little Prince",
+                releaseDate: "2015",
+                creators: "Irena Brignull, Bob Persichetti, Antoine de Saint-Exupéry",
+                stars: "Jeff Bridges, Mackenzie Foy, Rachel McAdams",
+                img: "\\images\\The_Little_Prince_(2015_film)_poster.png",
+                description: "A little girl lives in a very grown-up world with her mother, who tries to prepare her for it. Her neighbor, the Aviator, introduces the girl to an extraordinary world where anything is possible, the world of the Little Prince.",
+                _createdOn: 1743622161263,
+                _id: "038aa356-5efe-491a-840e-0180d98476bc"
+            }
     	},
     	likes: {
+    	},
+    	ideas: {
+    		"833e0e57-71dc-42c0-b387-0ce0caf5225e": {
+    			_ownerId: "847ec027-f659-4086-8032-5173e2f9c93a",
+    			title: "Feed the dog",
+    			description: "Lorem ipsum dolor, sit amet consectetur adipisicing elit. Minima possimus eveniet ullam aspernatur corporis tempore quia nesciunt nostrum mollitia consequatur. At ducimus amet aliquid magnam nulla sed totam blanditiis ullam atque facilis corrupti quidem nisi iusto saepe, consectetur culpa possimus quos? Repellendus, dicta pariatur! Delectus, placeat debitis error dignissimos nesciunt magni possimus quo nulla, fuga corporis maxime minus nihil doloremque aliquam quia recusandae harum. Molestias dolorum recusandae commodi velit cum sapiente placeat alias rerum illum repudiandae? Suscipit tempore dolore autem, neque debitis quisquam molestias officia hic nesciunt? Obcaecati optio fugit blanditiis, explicabo odio at dicta asperiores distinctio expedita dolor est aperiam earum! Molestias sequi aliquid molestiae, voluptatum doloremque saepe dignissimos quidem quas harum quo. Eum nemo voluptatem hic corrupti officiis eaque et temporibus error totam numquam sequi nostrum assumenda eius voluptatibus quia sed vel, rerum, excepturi maxime? Pariatur, provident hic? Soluta corrupti aspernatur exercitationem vitae accusantium ut ullam dolor quod!",
+    			img: "./images/best-pilates-youtube-workouts-2__medium_4x3.jpg",
+                isCompleted: false,
+    			_createdOn: 1615033373504,
+    			_id: "833e0e57-71dc-42c0-b387-0ce0caf5225e"
+    		},
+    		"247efaa7-8a3e-48a7-813f-b5bfdad0f46c": {
+    			_ownerId: "847ec027-f659-4086-8032-5173e2f9c93a",
+    			title: "Cook dinner",
+    			description: "Similique rem culpa nemo hic recusandae perspiciatis quidem, quia expedita, sapiente est itaque optio enim placeat voluptates sit, fugit dignissimos tenetur temporibus exercitationem in quis magni sunt vel. Corporis officiis ut sapiente exercitationem consectetur debitis suscipit laborum quo enim iusto, labore, quod quam libero aliquid accusantium! Voluptatum quos porro fugit soluta tempore praesentium ratione dolorum impedit sunt dolores quod labore laudantium beatae architecto perspiciatis natus cupiditate, iure quia aliquid, iusto modi esse!",
+    			img: "./images/brightideacropped.jpg",
+                isCompleted: true,
+    			_createdOn: 1615033452480,
+    			_id: "247efaa7-8a3e-48a7-813f-b5bfdad0f46c"
+    		},
+    		"b8608c22-dd57-4b24-948e-b358f536b958": {
+    			_ownerId: "35c62d76-8152-4626-8712-eeb96381bea8",
+    			title: "Bathe the kid",
+    			description: "Consectetur labore et corporis nihil, officiis tempora, hic ex commodi sit aspernatur ad minima? Voluptas nesciunt, blanditiis ex nulla incidunt facere tempora laborum ut aliquid beatae obcaecati quidem reprehenderit consequatur quis iure natus quia totam vel. Amet explicabo quidem repellat unde tempore et totam minima mollitia, adipisci vel autem, enim voluptatem quasi exercitationem dolor cum repudiandae dolores nostrum sit ullam atque dicta, tempora iusto eaque! Rerum debitis voluptate impedit corrupti quibusdam consequatur minima, earum asperiores soluta. A provident reiciendis voluptates et numquam totam eveniet! Dolorum corporis libero dicta laborum illum accusamus ullam?",
+    			img: "./images/dinner.jpg",
+                isCompleted: true,
+    			_createdOn: 1615033491967,
+    			_id: "b8608c22-dd57-4b24-948e-b358f536b958"
+    		}
+    	},
+    	catalog: {
+    		"53d4dbf5-7f41-47ba-b485-43eccb91cb95": {
+    			_ownerId: "35c62d76-8152-4626-8712-eeb96381bea8",
+    			make: "Table",
+    			model: "Swedish",
+    			year: 2015,
+    			description: "Medium table",
+    			price: 235,
+    			img: "./images/table.png",
+    			material: "Hardwood",
+    			_createdOn: 1615545143015,
+    			_id: "53d4dbf5-7f41-47ba-b485-43eccb91cb95"
+    		},
+    		"f5929b5c-bca4-4026-8e6e-c09e73908f77": {
+    			_ownerId: "847ec027-f659-4086-8032-5173e2f9c93a",
+    			make: "Sofa",
+    			model: "ES-549-M",
+    			year: 2018,
+    			description: "Three-person sofa, blue",
+    			price: 1200,
+    			img: "./images/sofa.jpg",
+    			material: "Frame - steel, plastic; Upholstery - fabric",
+    			_createdOn: 1615545572296,
+    			_id: "f5929b5c-bca4-4026-8e6e-c09e73908f77"
+    		},
+    		"c7f51805-242b-45ed-ae3e-80b68605141b": {
+    			_ownerId: "847ec027-f659-4086-8032-5173e2f9c93a",
+    			make: "Chair",
+    			model: "Bright Dining Collection",
+    			year: 2017,
+    			description: "Dining chair",
+    			price: 180,
+    			img: "./images/chair.jpg",
+    			material: "Wood laminate; leather",
+    			_createdOn: 1615546332126,
+    			_id: "c7f51805-242b-45ed-ae3e-80b68605141b"
+    		}
+    	},
+    	teams: {
+    		"34a1cab1-81f1-47e5-aec3-ab6c9810efe1": {
+    			_ownerId: "35c62d76-8152-4626-8712-eeb96381bea8",
+    			name: "Storm Troopers",
+    			logoUrl: "/assets/atat.png",
+    			description: "These ARE the droids we're looking for",
+    			_createdOn: 1615737591748,
+    			_id: "34a1cab1-81f1-47e5-aec3-ab6c9810efe1"
+    		},
+    		"dc888b1a-400f-47f3-9619-07607966feb8": {
+    			_ownerId: "847ec027-f659-4086-8032-5173e2f9c93a",
+    			name: "Team Rocket",
+    			logoUrl: "/assets/rocket.png",
+    			description: "Gotta catch 'em all!",
+    			_createdOn: 1615737655083,
+    			_id: "dc888b1a-400f-47f3-9619-07607966feb8"
+    		},
+    		"733fa9a1-26b6-490d-b299-21f120b2f53a": {
+    			_ownerId: "847ec027-f659-4086-8032-5173e2f9c93a",
+    			name: "Minions",
+    			logoUrl: "/assets/hydrant.png",
+    			description: "Friendly neighbourhood jelly beans, helping evil-doers succeed.",
+    			_createdOn: 1615737688036,
+    			_id: "733fa9a1-26b6-490d-b299-21f120b2f53a"
+    		}
+    	},
+    	members: {
+    		"cc9b0a0f-655d-45d7-9857-0a61c6bb2c4d": {
+    			_ownerId: "35c62d76-8152-4626-8712-eeb96381bea8",
+    			teamId: "34a1cab1-81f1-47e5-aec3-ab6c9810efe1",
+    			status: "member",
+    			_createdOn: 1616236790262,
+    			_updatedOn: 1616236792930
+    		},
+    		"61a19986-3b86-4347-8ca4-8c074ed87591": {
+    			_ownerId: "847ec027-f659-4086-8032-5173e2f9c93a",
+    			teamId: "dc888b1a-400f-47f3-9619-07607966feb8",
+    			status: "member",
+    			_createdOn: 1616237188183,
+    			_updatedOn: 1616237189016
+    		},
+    		"8a03aa56-7a82-4a6b-9821-91349fbc552f": {
+    			_ownerId: "847ec027-f659-4086-8032-5173e2f9c93a",
+    			teamId: "733fa9a1-26b6-490d-b299-21f120b2f53a",
+    			status: "member",
+    			_createdOn: 1616237193355,
+    			_updatedOn: 1616237195145
+    		},
+    		"9be3ac7d-2c6e-4d74-b187-04105ab7e3d6": {
+    			_ownerId: "35c62d76-8152-4626-8712-eeb96381bea8",
+    			teamId: "dc888b1a-400f-47f3-9619-07607966feb8",
+    			status: "member",
+    			_createdOn: 1616237231299,
+    			_updatedOn: 1616237235713
+    		},
+    		"280b4a1a-d0f3-4639-aa54-6d9158365152": {
+    			_ownerId: "60f0cf0b-34b0-4abd-9769-8c42f830dffc",
+    			teamId: "dc888b1a-400f-47f3-9619-07607966feb8",
+    			status: "member",
+    			_createdOn: 1616237257265,
+    			_updatedOn: 1616237278248
+    		},
+    		"e797fa57-bf0a-4749-8028-72dba715e5f8": {
+    			_ownerId: "60f0cf0b-34b0-4abd-9769-8c42f830dffc",
+    			teamId: "34a1cab1-81f1-47e5-aec3-ab6c9810efe1",
+    			status: "member",
+    			_createdOn: 1616237272948,
+    			_updatedOn: 1616237293676
+    		}
+    	}
+    };
+    var rules$1 = {
+    	users: {
+    		".create": false,
+    		".read": [
+    			"Owner"
+    		],
+    		".update": false,
+    		".delete": false
+    	},
+    	members: {
+    		".update": "isOwner(user, get('teams', data.teamId))",
+    		".delete": "isOwner(user, get('teams', data.teamId)) || isOwner(user, data)",
+    		"*": {
+    			teamId: {
+    				".update": "newData.teamId = data.teamId"
+    			},
+    			status: {
+    				".create": "newData.status = 'pending'"
+    			}
+    		}
     	}
     };
     var settings = {
     	identity: identity,
     	protectedData: protectedData,
-    	seedData: seedData
+    	seedData: seedData,
+    	rules: rules$1
     };
 
     const plugins = [
         storage(settings),
         auth(settings),
-        util$2()
+        util$2(),
+        rules(settings)
     ];
 
     const server = http__default['default'].createServer(requestHandler(plugins, services));
 
     const port = 3030;
+
     server.listen(port);
+
     console.log(`Server started on port ${port}. You can make requests to http://localhost:${port}/`);
     console.log(`Admin panel located at http://localhost:${port}/admin`);
 
-    var softuniPracticeServer = {
-
-    };
+    var softuniPracticeServer = server;
 
     return softuniPracticeServer;
 
