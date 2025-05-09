@@ -31,12 +31,15 @@ setTasks(initialTasks => initialTasks.map(task => task._id === taskId
 <section className="todo-list">
 <h1>Today's Tasks</h1>
 
-<div className="tasksList">
-{tasks.map(task =>  <ToDoItem  
+
+<ul className={styles.tasksList}>
+{tasks.map(task => 
+<ToDoItem  
 key={task._id} 
 {...task}
-onStatusChange={statusChangeHandler}/>)}
-</div>
+onStatusChange={statusChangeHandler}/>
+)}
+</ul>
 
 </section>
 </>

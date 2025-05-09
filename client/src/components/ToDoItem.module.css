@@ -1,3 +1,15 @@
+li {
+  display: flex;
+  justify-content: space-between;
+}
+
+div.text {
+  display: flex;
+  gap: 15px;
+}
+
+
+
 button {
   background-color: rgb(171, 163, 163);
   color: white;
@@ -17,13 +29,21 @@ button:hover {
 
 .textCompleted {
   text-decoration: line-through;
-  font-style: italic;
+  color: rgb(171, 163, 163);
 }
 
 .toDo {
-  color: orange;
+  color: white;
+  border: 2px solid orange;
+  border-radius: 3px;
+  padding: 4px 6px;
+  background-color: orange;
 }
 
 .isCompleted {
-  color: rgb(8, 164, 8);
+  color: white;
+  border: 2px solid rgb(72, 202, 72);
+  border-radius: 3px;
+  padding: 4px 6px;
+  background-color: rgb(72, 202, 72);
 }

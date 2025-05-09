@@ -3,11 +3,13 @@ import styles from './TodoItem.module.css';
 export default function ToDoItem ({_id, text, isCompleted, onStatusChange }) {
     return (
 <>
-<div className="single-task">
-  <span className={isCompleted ? styles['textCompleted'] : styles['textToDo']}>✔️ {text}</span>
-  <span className={isCompleted ? styles['isCompleted'] : styles['toDo']}> {isCompleted ? "Done" : "Pending"} </span>
+<li>
+  <div className={styles.text}>
+  <p className={isCompleted ? styles.textCompleted : styles.textToDo}> {text} </p>
+  <p className={isCompleted ? styles['isCompleted'] : styles['toDo']}> {isCompleted ? "done" : "pending"} </p>
+  </div>
   <button onClick={() => onStatusChange(_id)}>Change Status</button>
-</div>
+</li>
 </>
     )
 }
