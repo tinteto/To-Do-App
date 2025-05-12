@@ -1,11 +1,16 @@
 li {
   display: flex;
-  justify-content: space-between;
+justify-content: space-between;
 }
 
 div.text {
   display: flex;
   gap: 15px;
+}
+
+div.buttons {
+display: flex;
+gap: 5px;
 }
 
 
