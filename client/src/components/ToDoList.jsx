@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import ToDoItem from "./ToDoItem";
 import styles from './TodoList.module.css';
 
-const url = 'http://localhost:3030/data/ideas';
+const url = 'http://localhost:3030/jsonstore/todos';
 
 export default function ToDoList() {
   const [tasks, setTasks] = useState([]);
@@ -11,8 +11,10 @@ export default function ToDoList() {
 useEffect(() => {
 fetch(url)
 .then(response => response.json())
-.then(data => {  
-  setTasks(data);
+.then(data => {
+const result = Object.values(data);
+
+setTasks(result);
 })
   }, []);
 
@@ -23,6 +25,21 @@ setTasks(initialTasks => initialTasks.map(task => task._id === taskId
   : task
 ))
   }
+
+
+  const deleteTaskHandler = async (taskId) => {
+const response = await fetch(`${url}/${taskId}`, { method: 'DELETE' });
+
+if(response.ok) {
+  //!filter the deleted tasks from the current state
+  setTasks(initialTasks => initialTasks.filter(task => task._id !== taskId));
+} else {
+  console.error('Failed to delete task!')
+}
+
+}
+
+
     return (
 <>
 <section className="todo-list">
@@ -34,7 +51,8 @@ setTasks(initialTasks => initialTasks.map(task => task._id === taskId
 <ToDoItem  
 key={task._id} 
 {...task}
-onStatusChange={statusChangeHandler}/>
+onStatusChange={statusChangeHandler}
+onDeleteTask={deleteTaskHandler}/>
 )}
 </ul>
 
