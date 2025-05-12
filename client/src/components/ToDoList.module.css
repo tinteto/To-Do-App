@@ -11,3 +11,28 @@ ul.tasksList li {
     padding: 10px;
 }
 
+div.formContainer {
+    margin: 20px 0px;
+}
+
+
+form input {
+    padding: 8px;
+    border: 1px solid rgb(207, 201, 201);
+    border-radius: 5px;
+    margin-right: 5px;
+}
+
+button.btnAdd {
+    background-color: rgb(171, 163, 163);
+    color: white;
+    border: none;
+    border-radius: 5px;
+    padding: 8px 14px;
+    cursor: pointer;
+}
+
+      
+button.btnAdd:hover {
+    background-color: rgb(136, 43, 173);
+  }

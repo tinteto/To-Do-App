@@ -13,10 +13,9 @@ export default function ToDoItem ({_id, text, isCompleted, onStatusChange, onDel
   </div>
 
   <div className={styles.buttons}>
-  <button onClick={() => onStatusChange(_id)}>
-  <FontAwesomeIcon icon={faRedo} /> </button>
-  <button onClick={() => onDeleteTask(_id)}>
-  <FontAwesomeIcon icon={faTrash} /> </button>
+  <button onClick={() => onStatusChange(_id)}> <FontAwesomeIcon icon={faRedo} /> </button>
+
+  <button onClick={() => onDeleteTask(_id)}> <FontAwesomeIcon icon={faTrash} /> </button>
   </div>
 </li>
 </>
