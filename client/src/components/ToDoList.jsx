@@ -63,13 +63,12 @@ if (response.ok) {
   setTasks(initialTasks => [...initialTasks, result]);
   alert('Task created successfully!')
 }
-
 }
 
 
   return (
 <>
-<section className="todo-list">
+<section className={styles.todoList}>
 <h1>Today's Tasks</h1>
 
 <div className={styles.formContainer}>
