@@ -9,7 +9,7 @@ export default function ToDoItem ({_id, text, isCompleted, onStatusChange, onDel
 <li>
   <div className={styles.text}>
   <p className={isCompleted ? styles.textCompleted : styles.textToDo}> {text} </p>
-  <p className={isCompleted ? styles['isCompleted'] : styles['toDo']}> {isCompleted ? "done" : "pending"} </p>
+  <p className={isCompleted ? styles['isCompleted'] : styles['toDo']}> {isCompleted ? "Completed" : "Pending"} </p>
   </div>
 
   <div className={styles.buttons}>

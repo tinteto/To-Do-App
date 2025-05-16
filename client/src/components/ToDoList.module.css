@@ -1,5 +1,5 @@
 section.todoList {
-    background-color: rgb(240, 221, 248);
+    background-color: rgb(225, 249, 225);
     padding: 20px;
     border-radius: 5px;
 }
@@ -12,11 +12,17 @@ ul.tasksList {
 
 ul.tasksList li {
     list-style: none outside;
-    background-color: whitesmoke;
+    background-color: rgb(255, 252, 252);
     border: 1px solid rgb(207, 201, 201);
     border-radius: 4px;
-    padding: 5px;
+    padding: 7px;
 }
+
+ul.tasksList li:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2);
+}
+
 
 div.formContainer {
     margin: 20px 0px;
@@ -24,12 +30,13 @@ div.formContainer {
 
 
 form input {
-    background-color: whitesmoke;
+    background-color: rgb(255, 252, 252);
     padding: 8px;
     border: 1px solid rgb(207, 201, 201);
     border-radius: 5px;
     margin-right: 5px;
 }
+
 
 button.btnAdd {
     background-color: rgb(171, 163, 163);
@@ -42,5 +49,5 @@ button.btnAdd {
 
       
 button.btnAdd:hover {
-    background-color: rgb(136, 43, 173);
+    background-color: rgb(72, 202, 72);
   }
