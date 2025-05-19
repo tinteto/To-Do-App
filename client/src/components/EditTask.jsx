@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import styles from './EditTask.module.css';
 
-export default function EditTask({taskId, onClose, onEdit}) {
+export default function EditTask({taskId, onCloseEdit, onEdit}) {
 
     const [task, setTask] = useState({});
 
@@ -27,7 +27,7 @@ export default function EditTask({taskId, onClose, onEdit}) {
                                 <label htmlFor="taskName">Edit Task</label>
                                 <div className={styles.inputWrapper}>
                                     <span><i className="fa-solid fa-user"></i></span>
-                                    <input id="taskName" name="taskName" type="text" defaultValue={task.text} />
+                                    <input id="taskName" name="text" type="text" defaultValue={task.text} />
                                 </div>
                             </div>
 
@@ -36,7 +36,7 @@ export default function EditTask({taskId, onClose, onEdit}) {
                             {taskId &&
                                <button id={styles.actionEdit} className={styles.btn} type="submit" onClick={onEdit}>Edit</button>
                             }
-                               <button id={styles.actionCancel} className={styles.btn} type="button" onClick={onClose}>Cancel</button>
+                               <button id={styles.actionCancel} className={styles.btn} type="button" onClick={onCloseEdit}>Cancel</button>
                         </div>
                     </form>
                 </div>

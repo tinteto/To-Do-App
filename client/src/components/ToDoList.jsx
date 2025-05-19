@@ -4,6 +4,7 @@ import styles from './TodoList.module.css';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPlus, faPlusCircle } from '@fortawesome/free-solid-svg-icons';
 import EditTask from "./EditTask";
+import taskService from "../services/taskService";
 
 const url = 'http://localhost:3030/jsonstore/todos';
 
@@ -13,89 +14,62 @@ export default function ToDoList() {
   const [taskIdEdit, setTaskIdEdit] = useState(null);
   
   
-
-
 useEffect(() => {
-fetch(url)
-.then(response => response.json())
-.then(data => {
-const result = Object.values(data);
+  taskService.getAllTasks()
+  .then(tasks => {
+    setTasks(tasks);
+  });
+}, []);
 
-setTasks(result);
-})
-  }, []);
-
-const onSubmit = async (formData) => {
-    const taskData = Object.fromEntries(formData);
-    
-    if(taskData.text === "") {
-      alert('Missing fields!')
-      return;
-    }
-    
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',   
-      },
-      body: JSON.stringify(taskData)
-    });
-    
-    if (response.ok) {
-      const result = await response.json();
-      setTasks(initialTasks => [...initialTasks, result]);
-      alert('Task created successfully!');
-    }
+const statusChangeHandler = (taskId) => {
+  setTasks(initialTasks => initialTasks.map(task => task._id === taskId 
+    ? {...task, isCompleted: !task.isCompleted}
+    : task
+  ))
 }
 
-const editTaskHandler = (taskId) => {
+const openEditForm = (taskId) => {
 setTaskIdEdit(taskId);
 }
 
-const closeTaskHandler = () => {
+const closeEditForm = () => {
 setShowEdit(false);
 setTaskIdEdit(null);
 }
 
-const statusChangeHandler = (taskId) => {
-setTasks(initialTasks => initialTasks.map(task => task._id === taskId 
-  ? {...task, isCompleted: !task.isCompleted}
-  : task
-))
+const addNewTaskHandler = async (formData) => {
+  const text = formData.get('text');
+
+  if(text === "") {
+      alert('Missing fields!')
+      return;
+  }
+    
+  const newTask = await taskService.createTask(text);
+  setTasks(initialTasks => [...initialTasks, newTask]);
+  alert("Task created successfully!");
 }
 
-
-const saveEditTaskHandler = async (e) => {
+const editTaskHandler = async (e) => {
 const taskId = taskIdEdit;
-
 e.preventDefault();
 
-  // const response = await fetch(`${url}/${taskId}`, {
-  //   method: 'PUT',
-  //   headers: {
-  //     'Content-Type': 'application/json',  
-  //   },
-  //   body: JSON.stringify({taskData, id: taskId})
-  // })
+const formData = new FormData(e.target.parentElement.parentElement);
+const text = formData.get('text');
 
-  // if(response.ok) {
-  //   const result = await response.json();
-  //   setTasks(initialTasks => [...initialTasks, result]);
-  //   alert('Task edited successfully!');
-  // }
+const updatedTask = await taskService.editTask(taskId, text);
+setTasks(initialTasks => initialTasks.map(task => task._id === taskId ? updatedTask : task));
+alert('Task edited successfully!');
+
+//Close modal
+setTaskIdEdit(null);
 }
   
-
 const deleteTaskHandler = async (taskId) => {
-const response = await fetch(`${url}/${taskId}`, { method: 'DELETE' });
+await taskService.deleteTask(taskId);
 
-if(response.ok) {
-  //!filter the deleted tasks from the current state
-  setTasks(initialTasks => initialTasks.filter(task => task._id !== taskId));
-} else {
-  console.error('Failed to delete task!')
-}
-
+//!filter the deleted tasks from the current state
+setTasks(initialTasks => initialTasks.filter(task => task._id !== taskId));
 }
 
   return (
@@ -104,7 +78,7 @@ if(response.ok) {
 <h1>Today's Tasks</h1>
 
 <div className={styles.formContainer}>
-<form action={onSubmit}>
+<form action={addNewTaskHandler}>
   <input type="text" name="text" className="newTask" placeholder="Add new task"/>
   <button className={styles.btnAdd}> <FontAwesomeIcon icon={faPlusCircle} /> </button>
 </form>
@@ -117,7 +91,7 @@ key={task._id}
 {...task}
 onStatusChange={statusChangeHandler}
 onDeleteTask={deleteTaskHandler}
-onEditClick={editTaskHandler}
+onOpenEdit={openEditForm}
 />
 )}
 </ul>
@@ -127,8 +101,8 @@ onEditClick={editTaskHandler}
 {taskIdEdit && (
     <EditTask 
     taskId={taskIdEdit}
-    onClose={closeTaskHandler} 
-    onEdit={saveEditTaskHandler}
+    onCloseEdit={closeEditForm} 
+    onEdit={editTaskHandler}
     />
   )}
 

@@ -3,7 +3,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faTrash, faEdit, faSyncAlt, faRedo } from '@fortawesome/free-solid-svg-icons';
 
 
-export default function ToDoItem ({_id, text, isCompleted, onStatusChange, onEditClick, onDeleteTask }) {
+export default function ToDoItem ({_id, text, isCompleted, onStatusChange, onOpenEdit, onDeleteTask }) {
     return (
 <>
 <li>
@@ -14,7 +14,7 @@ export default function ToDoItem ({_id, text, isCompleted, onStatusChange, onEdi
 
   <div className={styles.buttons}>
   <button onClick={() => onStatusChange(_id)}> <FontAwesomeIcon icon={faRedo} /> </button>
-  <button onClick={() => onEditClick(_id)}> <FontAwesomeIcon icon={faEdit} /> </button>
+  <button onClick={() => onOpenEdit(_id)}> <FontAwesomeIcon icon={faEdit} /> </button>
   <button onClick={() => onDeleteTask(_id)}> <FontAwesomeIcon icon={faTrash} /> </button>
   </div>
 </li>
