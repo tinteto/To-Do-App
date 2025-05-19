@@ -1,16 +1,23 @@
 li {
 display: flex;
 justify-content: space-between;
+align-items: center;
+flex-wrap: wrap;
+gap: 10px;
 }
 
 div.text {
   display: flex;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 15px;
+  word-break: break-word;
 }
 
 div.buttons {
 display: flex;
 gap: 5px;
+flex-wrap: wrap;
 }
 
 
@@ -22,6 +29,8 @@ button {
   border-radius: 5px;
   padding: 6px 12px;
   cursor: pointer;
+  transition: background-color 0.3s ease;
+  font-size: 0.9rem;
 }
 
 button:hover {
@@ -37,20 +46,53 @@ button:hover {
   color: rgb(171, 163, 163);
 }
 
+.toDo,
+.isCompleted {
+  padding: 6px 10px;
+  border-radius: 15px;
+  font-size: 0.8rem;
+  font-weight: bold;
+  text-align: center;
+  white-space: nowrap;
+}
+
 .toDo {
   background-color: orange;
   color: white;
   border: 2px solid orange;
-  border-radius: 15px;
-  padding: 6px;
-
 }
 
 .isCompleted {
   background-color: rgb(72, 202, 72);
   color: white;
   border: 2px solid rgb(72, 202, 72);
-  border-radius: 15px;
-  padding: 6px;
+}
 
+
+/* Responsive adjustments */
+@media (max-width: 500px) {
+  li {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  div.text {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  div.buttons {
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  button {
+    width: 100%;
+    text-align: center;
+  }
+
+  .toDo,
+  .isCompleted {
+    width: fit-content;
+  }
 }

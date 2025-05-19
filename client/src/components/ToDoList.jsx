@@ -1,12 +1,13 @@
-import { useEffect, useState } from "react";
-import ToDoItem from "./ToDoItem";
 import styles from './TodoList.module.css';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPlus, faPlusCircle } from '@fortawesome/free-solid-svg-icons';
+
+import { useEffect, useState } from "react";
+
 import EditTask from "./EditTask";
+import ToDoItem from "./ToDoItem";
 import taskService from "../services/taskService";
 
-const url = 'http://localhost:3030/jsonstore/todos';
 
 export default function ToDoList() {
   const [tasks, setTasks] = useState([]);

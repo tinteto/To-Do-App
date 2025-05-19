@@ -5,12 +5,14 @@
 }
 
 body {
-  font: 15px Verdana;
+  font: 15px Verdana, sans-serif;
+  padding: 10px;
 }
 
 div.container {
   margin: 20px auto;
-  max-width: 30%;
+  width: 90%;
+  max-width: 600px;
 }
 
 h1 {

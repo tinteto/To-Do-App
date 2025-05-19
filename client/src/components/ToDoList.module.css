@@ -8,6 +8,7 @@ ul.tasksList {
     display: flex;
     flex-direction: column;
     gap: 2px;
+    padding-left: 0;
 }
 
 ul.tasksList li {
@@ -16,6 +17,7 @@ ul.tasksList li {
     border: 1px solid rgb(207, 201, 201);
     border-radius: 4px;
     padding: 7px;
+
 }
 
 ul.tasksList li:hover {
@@ -26,6 +28,10 @@ ul.tasksList li:hover {
 
 div.formContainer {
     margin: 20px 0px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+
 }
 
 
@@ -35,19 +41,53 @@ form input {
     border: 1px solid rgb(207, 201, 201);
     border-radius: 5px;
     margin-right: 5px;
+    transition: border-color 0.2s;
 }
 
 
+form input:focus {
+    border-color: rgb(72, 202, 72);
+    outline: none;
+}
 button.btnAdd {
     background-color: rgb(171, 163, 163);
     color: white;
     border: none;
     border-radius: 5px;
-    padding: 8px 14px;
+    padding: 10px 14px;
     cursor: pointer;
+    transition: background-color 0.3s ease;
 }
 
       
 button.btnAdd:hover {
     background-color: rgb(72, 202, 72);
-  }
+}
+
+
+
+@media (min-width: 600px) {
+    div.formContainer {
+      flex-direction: row;
+      align-items: center;
+    }
+  
+    form input {
+      margin-right: 5px;
+    }
+}
+  
+@media (max-width: 400px) {
+    h1 {
+      font-size: 1.2rem;
+    }
+  
+    form input,
+    button.btnAdd {
+      width: 100%;
+    }
+  
+    div.formContainer {
+      gap: 8px;
+    }
+}

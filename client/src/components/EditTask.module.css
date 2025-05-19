@@ -10,6 +10,7 @@
     justify-content: center;
     align-items: center;
     z-index: 1000;
+    padding: 1rem;
 }
 
 
@@ -17,10 +18,12 @@
     background-color:rgb(225, 249, 225);
     border-radius: 8px;
     padding: 2rem;
-    width: 90%;
+    width: 100%;
     max-width: 500px;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
     animation: fadeIn 0.3s ease-in-out;
+    overflow-y: auto; 
+    max-height: 90vh;
 }
 
 
@@ -28,6 +31,7 @@
     margin: 0 0 1rem;
     font-size: 1.5rem;
     color: #333;
+    text-align: center;
 }
 
 
@@ -78,6 +82,7 @@
 
 #formActions {
     display: flex;
+    flex-wrap: wrap;
     justify-content: flex-end;
     margin-top: 1.5rem;
     gap: 1rem;
@@ -90,6 +95,7 @@
     border: none;
     cursor: pointer;
     transition: background-color 0.2s;
+    min-width: 100px;
 }
 
 #actionEdit {
@@ -119,5 +125,23 @@
     to {
         opacity: 1;
         transform: scale(1);
+    }
+}
+
+
+
+@media (max-width: 400px) {
+    .modal {
+        padding: 1rem;
+    }
+
+    .btn {
+        width: 100%;
+        text-align: center;
+    }
+
+    #formActions {
+        flex-direction: column;
+        align-items: stretch;
     }
 }

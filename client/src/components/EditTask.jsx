@@ -1,5 +1,7 @@
-import { useEffect, useState } from "react";
 import styles from './EditTask.module.css';
+
+import { useEffect, useState } from "react";
+
 
 export default function EditTask({taskId, onCloseEdit, onEdit}) {
 
