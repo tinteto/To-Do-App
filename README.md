@@ -1,2 +1,6 @@
 # To-Do-App
-Small app for managing tasks
+Small application for managing everyday tasks.
+
+REST Service used:
+SofUni Practice Server: https://github.com/softuni-practice-server/softuni-practice-server. 
+To run the server: In the terminal navigate to the server directory and run ‘node server.js’ command.
