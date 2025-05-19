@@ -18,7 +18,7 @@ export default function EditTask({taskId, onClose, onEdit}) {
 
     return (
         <>
-            <div className={styles.overlay} onClick={onClose}>
+            <div className={styles.overlay} >
             <div className={styles.modal}>
                 <div className="user-container">
                     <form>
