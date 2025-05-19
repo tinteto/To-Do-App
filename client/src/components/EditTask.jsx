@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState } from "react";
+import styles from './EditTask.module.css';
 
 export default function EditTask({taskId, onClose, onEdit}) {
 
@@ -17,28 +18,25 @@ export default function EditTask({taskId, onClose, onEdit}) {
 
     return (
         <>
-            <div className="overlay">
-            <div className="modal">
+            <div className={styles.overlay} onClick={onClose}>
+            <div className={styles.modal}>
                 <div className="user-container">
-                    <header className="headers">
-                        <h2>Edit Task</h2>
-                    </header>
                     <form>
-                        <div className="form-row">
-                            <div className="form-group">
-                                <label htmlFor="taskName">Task</label>
-                                <div className="input-wrapper">
+                        <div className={styles.formRow}>
+                            <div className={styles.formGroup}>
+                                <label htmlFor="taskName">Edit Task</label>
+                                <div className={styles.inputWrapper}>
                                     <span><i className="fa-solid fa-user"></i></span>
                                     <input id="taskName" name="taskName" type="text" defaultValue={task.text} />
                                 </div>
                             </div>
 
                         </div>
-                        <div id="form-actions">
+                        <div id={styles.formActions}>
                             {taskId &&
-                               <button id="actionEdit" className="btn" type="submit" onClick={onEdit}>Edit</button>
+                               <button id={styles.actionEdit} className={styles.btn} type="submit" onClick={onEdit}>Edit</button>
                             }
-                               <button id="actionCancel" className="btn" type="button" onClick={onClose}>Cancel</button>
+                               <button id={styles.actionCancel} className={styles.btn} type="button" onClick={onClose}>Cancel</button>
                         </div>
                     </form>
                 </div>
